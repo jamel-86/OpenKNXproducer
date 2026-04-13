@@ -1171,8 +1171,14 @@ namespace OpenKNXproducer
                 if (sParameterTypes.ContainsKey(lParameterType))
                 {
                     // get first child ignoring comments
-                    XmlNode lChild = sParameterTypes[lParameterType].ChildNodes[0];
+                    XmlNode lChild = sParameterTypes[lParameterType].FirstChild;
                     while (lChild != null && lChild.NodeType != XmlNodeType.Element) lChild = lChild.NextSibling;
+
+                    if (lChild == null)
+                    {
+                        iCheck.WriteFail("ParameterType {0} referenced by {1} has no element child", lParameterType, iMessage);
+                        return iValue;
+                    }
 
                     int sizeInBit;
                     long maxSize = 0;

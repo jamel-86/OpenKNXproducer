@@ -668,22 +668,17 @@ namespace OpenKNXproducer
                     lSourceDirName = iInclude.mCurrentDir;
                 else
                     lSourceDirName = Path.Combine(iInclude.mCurrentDir, "Baggages", lTargetPath);
-                string lTargetDirRoot = Path.Combine(mCurrentDir, mBaggagesName);
-                lPathAttr.Value = Path.Combine(BaggagesBaseDir, lTargetPath);
-                // on MacOS/Linux we have to replace the path separator
-                lPathAttr.Value = lPathAttr.Value.Replace("/", "\\");
                 if (lBaggageId.StartsWith("%FILE-HELP") || lBaggageId.StartsWith("%FILE-ICONS"))
                 {
+                    string lTargetDirRoot = Path.Combine(mCurrentDir, mBaggagesName);
+                    lPathAttr.Value = lTargetPath.Replace("/", "\\");
                     // context sensitive help and icons have to be merged
                     // we expect a directory, even if the file notation says ".zip"
                     lFileName = lFileName.Replace(".zip", "");
                     // for ETS, we need a zip and ensure, that it is generated
                     lFileNameAttr.Value = lFileName + ".zip";
-                    // the path has to go to the specific application folder of the root application
-                    // lPath = DetermineBaggagePath(lPath);
                     if (mCurrentDir == iInclude.mCurrentDir)
                     {
-                        // BaggagesBaseDir = lPath;
                         if (!mBaggageTargetZipDirName.ContainsKey(lBaggageId))
                         {
                             mBaggageTargetZipDirName.Add(lBaggageId, lFileName);
@@ -700,11 +695,15 @@ namespace OpenKNXproducer
                             mBaggageTargetZipDirName.Add(lBaggageId, lFileName);
                         }
                         var lSourceDir = new DirectoryInfo(lSourceDirName);
-                        lSourceDir.DeepCopy(Path.Combine(lTargetDirRoot, BaggagesBaseDir, mBaggageTargetZipDirName[lBaggageId]));
+                        lSourceDir.DeepCopy(Path.Combine(lTargetDirRoot, mBaggageTargetZipDirName[lBaggageId]));
                     }
                 }
                 else
                 {
+                    string lTargetDirRoot = Path.Combine(mCurrentDir, mBaggagesName);
+                    lPathAttr.Value = Path.Combine(BaggagesBaseDir, lTargetPath);
+                    // on MacOS/Linux we have to replace the path separator
+                    lPathAttr.Value = lPathAttr.Value.Replace("/", "\\");
                     // we copy single files without any merge process
                     string lSourceFileName = Path.Combine(lSourceDirName, lFileName);
                     string lTargetDirName = Path.Combine(lTargetDirRoot, BaggagesBaseDir, lTargetPath);
@@ -1161,14 +1160,26 @@ namespace OpenKNXproducer
                             lPath = lPath.Replace(Path.AltDirectorySeparatorChar.ToString(), Path.DirectorySeparatorChar.ToString());
                         }
                         lFileName = lBaggage.NodeAttr("Name");
-                        lIdNode = lBaggage.Attributes.GetNamedItem("Id");
-                        if (HandleZipFile("%FILE-HELP", ref lWithHelp)) continue;
-                        if (HandleZipFile("%FILE-ICONS", ref lWithIcons)) continue;
-
                         string lBaggageId = string.Format("M-00FA_BG-{0}-{1}", Program.GetEncoded(lPath), Program.GetEncoded(lFileName));
-                        if (!mBaggageId.ContainsKey(lIdNode.Value))
-                            mBaggageId.Add(lIdNode.Value, lBaggageId);
-                        lIdNode.Value = lBaggageId;
+                        lIdNode = lBaggage.Attributes.GetNamedItem("Id");
+                        if (HandleZipFile("%FILE-HELP", ref lWithHelp))
+                        {
+                            if (!mBaggageId.ContainsKey(lIdNode.Value))
+                                mBaggageId.Add(lIdNode.Value, lBaggageId);
+                            lIdNode.Value = lBaggageId;
+                        }
+                        else if (HandleZipFile("%FILE-ICONS", ref lWithIcons))
+                        {
+                            if (!mBaggageId.ContainsKey(lIdNode.Value))
+                                mBaggageId.Add(lIdNode.Value, lBaggageId);
+                            lIdNode.Value = lBaggageId;
+                        }
+                        else
+                        {
+                            if (!mBaggageId.ContainsKey(lIdNode.Value))
+                                mBaggageId.Add(lIdNode.Value, lBaggageId);
+                            lIdNode.Value = lBaggageId;
+                        }
                         DateTime lFileLastWrite = File.GetLastWriteTimeUtc(Path.Combine(mCurrentDir, mBaggagesName, lPath, lFileName));
                         string lIsoDateTime = lFileLastWrite.ToString("o", CultureInfo.InvariantCulture);
                         XmlNode lTimeInfo = lBaggage.SelectSingleNode("FileInfo/@TimeInfo", nsmgr);
@@ -1214,27 +1225,55 @@ namespace OpenKNXproducer
         private void ReplaceBaggages(XmlNode iTargetNode)
         {
             XmlNodeList lRefIds = iTargetNode.SelectNodes(@"//./@*[starts-with(.,'%FILE-')]", nsmgr);
-            int lProjectNamespace = GetIdOfProjectNamespace((XmlDocument)iTargetNode);
+            List<XmlNode> lAttrsToRemove = new();
             if (lRefIds != null)
             {
                 foreach (XmlNode lRefId in lRefIds)
                 {
+                    string lOriginalRefValue = lRefId.Value;
                     if (mBaggageId.ContainsKey(lRefId.Value))
                     {
                         lRefId.Value = mBaggageId[lRefId.Value];
                     }
-                    if (lProjectNamespace == 14)
+                    string lRefIdLookup = lOriginalRefValue.EndsWith("%") ? lOriginalRefValue.TrimEnd('%') : lOriginalRefValue;
+
+                    if (lRefId.Name == "ContextHelpFile")
                     {
-                        if (lRefId.Name == "ContextHelpFile")
+                        if (mBaggageId.TryGetValue(lRefIdLookup, out var lBaggageRefId))
+                        {
+                            lRefId.Value = lBaggageRefId;
+                        }
+                        else if (!string.IsNullOrEmpty(mBaggageHelpFileName))
                         {
                             lRefId.Value = mBaggageHelpFileName;
                         }
-                        else
-                        if (lRefId.Name == "IconFile")
+                    }
+                    else if (lRefId.Name == "IconFile")
+                    {
+                        if (mBaggageId.TryGetValue(lRefIdLookup, out var lBaggageRefId))
+                        {
+                            lRefId.Value = lBaggageRefId;
+                        }
+                        else if (lRefId.Value.StartsWith("%FILE-") && !string.IsNullOrEmpty(mBaggageIconFileName))
                         {
                             lRefId.Value = mBaggageIconFileName;
                         }
                     }
+
+                    // For newer namespaces the placeholders are still emitted by the template,
+                    // but if no baggage was provided they must not survive into the final XML.
+                    if (lRefId.Value.StartsWith("%FILE-"))
+                    {
+                        lAttrsToRemove.Add(lRefId);
+                    }
+                }
+            }
+
+            foreach (XmlNode lAttr in lAttrsToRemove)
+            {
+                if (lAttr is XmlAttribute lXmlAttr)
+                {
+                    lXmlAttr.OwnerElement?.Attributes?.Remove(lXmlAttr);
                 }
             }
         }
@@ -1247,6 +1286,8 @@ namespace OpenKNXproducer
                 lExtensions.RemoveAll();
                 foreach (var lBaggageId in mBaggageId)
                 {
+                    if (lBaggageId.Key.StartsWith("%FILE-HELP") || lBaggageId.Key.StartsWith("%FILE-ICONS"))
+                        continue;
                     XmlNode lBaggage = ((XmlDocument)iTargetNode).CreateElement("Baggage");
                     lExtensions.AppendChild(lBaggage);
                     XmlAttribute lRefId = ((XmlDocument)iTargetNode).CreateAttribute("RefId");
@@ -2354,4 +2395,3 @@ namespace OpenKNXproducer
         }
     }
 }
-

@@ -178,8 +178,16 @@ partial class TemplateApplication
             InitParam(lParams, "BuildSuffixText", false, "BuildSuffix");
             InitParam(lParams, "BusCurrent", false, "", "10");
             InitParam(lParams, "IsRailMounted", false, "", "false");
+            InitParam(lParams, "IsIPEnabled", false, "", "false");
             InitParam(lParams, "MaskVersion", false, "", "MV-07B0");
             InitParam(lParams, "MediumTypes", false, "", "MT-0");
+            InitParam(lParams, "IPConfig", false, "", "Custom");
+            lParams["%IsIPEnabledAttribute%"] = lParams["%IsIPEnabled%"].Equals("true", StringComparison.OrdinalIgnoreCase)
+                    ? " IsIPEnabled=\"true\""
+                    : "";
+            lParams["%IPConfigAttribute%"] = string.IsNullOrWhiteSpace(lParams["%IPConfig%"])
+                    ? ""
+                    : $" IPConfig=\"{lParams["%IPConfig%"]}\"";
             _ = int.TryParse(lParams["%ApplicationNumber%"], out int lApplicationNumberInt);
             _ = int.TryParse(lParams["%ApplicationVersion%"], out int lApplicationVersionInt);
             _ = int.TryParse(lParams["%FirmwareRevision%"], out int lFirmwareRevisionInt);
